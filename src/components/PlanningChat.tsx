@@ -35,6 +35,8 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
   ])
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [recognition, setRecognition] = useState<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -45,6 +47,36 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Initialize speech recognition
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      if (SpeechRecognition) {
+        const recognitionInstance = new SpeechRecognition()
+        recognitionInstance.continuous = false
+        recognitionInstance.interimResults = false
+        recognitionInstance.lang = 'en-US'
+
+        recognitionInstance.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript
+          setInputMessage(transcript)
+          setIsListening(false)
+        }
+
+        recognitionInstance.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error)
+          setIsListening(false)
+        }
+
+        recognitionInstance.onend = () => {
+          setIsListening(false)
+        }
+
+        setRecognition(recognitionInstance)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (isOpen && inputRef.current) {
@@ -144,6 +176,21 @@ This helps users drag these locations directly to their trip canvas with accurat
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
+    }
+  }
+
+  const startListening = () => {
+    if (recognition && !isListening) {
+      setIsListening(true)
+      setInputMessage('')
+      recognition.start()
+    }
+  }
+
+  const stopListening = () => {
+    if (recognition && isListening) {
+      recognition.stop()
+      setIsListening(false)
     }
   }
 
@@ -276,10 +323,33 @@ This helps users drag these locations directly to their trip canvas with accurat
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask about destinations, routes, travel times..."
+              placeholder={isListening ? "Listening..." : "Ask about destinations, routes, travel times..."}
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              disabled={isLoading}
+              disabled={isLoading || isListening}
             />
+            
+            {/* Microphone Button */}
+            <button
+              onClick={isListening ? stopListening : startListening}
+              disabled={isLoading}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                isListening 
+                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                  : 'bg-gray-500 hover:bg-gray-600 text-white'
+              } disabled:bg-gray-300 disabled:cursor-not-allowed`}
+              title={isListening ? "Stop listening" : "Start voice input"}
+            >
+              {isListening ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 6h12v12H6z"/>
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2c1.1 0 2 .9 2 2v6c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H6c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+              )}
+            </button>
+
             <button
               onClick={sendMessage}
               disabled={!inputMessage.trim() || isLoading}

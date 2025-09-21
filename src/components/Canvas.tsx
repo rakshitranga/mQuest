@@ -229,7 +229,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
       {boxes.map((box) => (
         <div
           key={box.id}
-          className="box absolute rounded-xl shadow-md border border-gray-200 p-4 w-80 h-40 group text-black"
+          className="box absolute rounded-xl shadow-md border-4 border-amber-600 p-4 w-80 h-40 group text-black"
           style={{ 
             left: box.x, 
             top: box.y,
@@ -261,13 +261,13 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
           />
           <input
             type="text"
-            className="w-full text-xs text-gray-700 focus:outline-none bg-gray-50 rounded p-1 mb-1"
+            className="w-full text-xs text-gray-700 focus:outline-none bg-transparent rounded p-1 mb-1"
             placeholder="Address or location..."
             value={box.address}
             onChange={(e) => updateBox(box.id, 'address', e.target.value)}
           />
           <textarea
-            className="w-full text-xs text-gray-700 rounded p-1 resize-none focus:outline-none bg-gray-50"
+            className="w-full text-xs text-gray-700 rounded p-1 resize-none focus:outline-none bg-transparent"
             placeholder="Add description, notes, or details..."
             rows={2}
             value={box.description}
