@@ -153,6 +153,22 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
     notifyDataChange(newBoxes, newConnections);
   };
 
+  // Remove all connections
+  const removeAllConnections = () => {
+    setConnections([]);
+    notifyDataChange(boxes, []);
+  };
+
+  // Remove connections from a specific box and side
+  const removeConnectionsFromPoint = (boxId: string, side: "top" | "bottom") => {
+    const newConnections = connections.filter(
+      conn => !(conn.from === boxId && conn.fromSide === side) && 
+              !(conn.to === boxId && conn.toSide === side)
+    );
+    setConnections(newConnections);
+    notifyDataChange(boxes, newConnections);
+  };
+
 
   // Import JSON
   const handleImportClick = () => fileInputRef.current?.click();
@@ -211,6 +227,12 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
       {/* Toolbar actions */}
       <div className="absolute top-5 right-5 flex gap-3 z-10">
         <button
+          onClick={removeAllConnections}
+          className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 text-sm"
+        >
+          Remove All Arrows
+        </button>
+        <button
           onClick={handleImportClick}
           className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 text-sm"
         >
@@ -257,7 +279,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
           style={{ 
             left: box.x, 
             top: box.y,
-            backgroundColor: 'white'
+            backgroundColor: 'tan'
           }}
           onMouseDown={(e) => {
             // Only drag if not clicking on an attachment point or delete button
@@ -293,7 +315,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
 
           {/* Attachment points */}
           <div
-            className="attachment-point absolute left-1/2 -top-2 w-3 h-3 bg-blue-500 rounded-full cursor-crosshair transform -translate-x-1/2"
+            className="attachment-point absolute left-1/2 -top-2 w-3 h-3 bg-blue-500 rounded-full cursor-crosshair transform -translate-x-1/2 hover:bg-blue-600"
             onMouseDown={(e) => {
               e.preventDefault();
               startConnection(box.id, "top");
@@ -302,9 +324,15 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
               e.preventDefault();
               finishConnection(box.id, "top");
             }}
+            onDoubleClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              removeConnectionsFromPoint(box.id, "top");
+            }}
+            title="Click to connect, double-click to remove connections"
           />
           <div
-            className="attachment-point absolute left-1/2 -bottom-2 w-3 h-3 bg-blue-500 rounded-full cursor-crosshair transform -translate-x-1/2"
+            className="attachment-point absolute left-1/2 -bottom-2 w-3 h-3 bg-blue-500 rounded-full cursor-crosshair transform -translate-x-1/2 hover:bg-blue-600"
             onMouseDown={(e) => {
               e.preventDefault();
               startConnection(box.id, "bottom");
@@ -313,6 +341,12 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
               e.preventDefault();
               finishConnection(box.id, "bottom");
             }}
+            onDoubleClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              removeConnectionsFromPoint(box.id, "bottom");
+            }}
+            title="Click to connect, double-click to remove connections"
           />
         </div>
       ))}
