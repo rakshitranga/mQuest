@@ -71,13 +71,17 @@ export default function TripPage() {
       setLoading(true)
       const tripData = await dbHelpers.getTripById(tripId)
       setTrip(tripData)
-      // Load canvas data from trip_data
+      // Load canvas data from trip_data or initialize empty
       if (tripData.trip_data?.canvas) {
         setCanvasData(tripData.trip_data.canvas)
+      } else {
+        setCanvasData({ boxes: [], connections: [] })
       }
     } catch (error) {
       console.error('Error loading trip:', error)
       setError('Failed to load trip')
+      // Initialize empty canvas data even on error to prevent black screen
+      setCanvasData({ boxes: [], connections: [] })
     } finally {
       setLoading(false)
     }
@@ -231,10 +235,14 @@ export default function TripPage() {
     }
   }
 
-  if (authLoading || loading) {
+  // Wait for auth, trip data, and canvas data to be ready
+  if (authLoading || loading || !canvasData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your trip...</p>
+        </div>
       </div>
     )
   }

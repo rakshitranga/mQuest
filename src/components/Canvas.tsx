@@ -75,7 +75,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
         y: y - 66,  // Center the box (height/2)
         title: customTitle || "New Location",
         description: customDescription || "Click to edit description",
-        address: customTitle || "New Location"
+        address: customTitle || "Enter Address Line"
       };
 
       const newBoxes = [...boxes, newBox];

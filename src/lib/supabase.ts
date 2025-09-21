@@ -26,7 +26,7 @@ export interface Trip {
   title: string
   description?: string
   admin_user_id: string
-  trip_data: any
+  trip_data: Record<string, unknown>
   collaborator_ids: string[]
   is_public: boolean
   created_at: string

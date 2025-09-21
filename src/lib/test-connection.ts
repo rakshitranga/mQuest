@@ -11,7 +11,7 @@ export async function testSupabaseConnection() {
     console.log('✓ Supabase client initialized')
     
     // Test 2: Test database connection
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('users')
       .select('count')
       .limit(1)

@@ -1,4 +1,4 @@
-export async function callMapsMCP(method: string, params: any) {
+export async function callMapsMCP(method: string, params: Record<string, unknown>) {
     const res = await fetch("http://localhost:4000/mcp", {
       method: "POST",
       headers: {
@@ -70,8 +70,9 @@ export async function geminiMaps(prompt: string, system: string = "") {
   });
 
   // Support both property and function styles
-  const t = typeof (response as any).text === "function"
-    ? await (response as any).text()
-    : (response as any).text;
+  const responseObj = response as { text?: string | (() => Promise<string>) };
+  const t = typeof responseObj.text === "function"
+    ? await responseObj.text()
+    : responseObj.text;
   return t;
 }
