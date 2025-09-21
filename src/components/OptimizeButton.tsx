@@ -16,7 +16,7 @@ export default function OptimizeButton({ onClick }: OptimizeButtonProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={`
-        fixed bottom-6 right-24 z-50
+        fixed bottom-40 right-13 z-50
         w-14 h-14 rounded-full shadow-lg
         flex items-center justify-center
         transition-all duration-300 ease-in-out
