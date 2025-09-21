@@ -372,13 +372,62 @@ export default function TripPage() {
       const data = await response.json()
 
       if (data.success) {
+        // Add "Calculating..." duration to all new connections
+        const connectionsWithDuration = data.connections.map((conn: any) => ({
+          ...conn,
+          duration: 'Calculating...'
+        }))
+
         // Update canvas with optimized connections
         const updatedCanvasData = {
           ...canvasData,
-          connections: data.connections
+          connections: connectionsWithDuration
         }
         
         setCanvasData(updatedCanvasData)
+        setHasUnsavedChanges(true)
+        
+        // Calculate travel times for each connection
+        const boxes = canvasData.boxes || []
+        const connectionsWithTravelTimes = await Promise.all(
+          connectionsWithDuration.map(async (conn: any) => {
+            const fromBox = boxes.find(b => b.id === conn.from)
+            const toBox = boxes.find(b => b.id === conn.to)
+            
+            if (fromBox && toBox && fromBox.address && toBox.address && 
+                fromBox.address.trim() !== '' && toBox.address.trim() !== '') {
+              try {
+                const travelTimeResponse = await fetch('/api/plan', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    prompt: `Get driving directions and travel time from "${fromBox.address}" to "${toBox.address}". Only return the travel time duration (e.g., "15 mins", "1 hour 30 mins").`,
+                    system: `You are a travel time calculator. Use Google Maps services to get the driving time between two locations. Return ONLY the travel duration in a simple format like "15 mins", "1 hour 30 mins", or "2 hours". Do not include any other text or explanations.`
+                  }),
+                })
+
+                const travelData = await travelTimeResponse.json()
+                if (travelData.ok && travelData.text) {
+                  const timeMatch = travelData.text.match(/(\d+\s*(?:hour|hr|h)?\s*\d*\s*(?:minute|min|m)?s?)/i)
+                  return { ...conn, duration: timeMatch ? timeMatch[0] : 'Unknown' }
+                }
+              } catch (error) {
+                console.error('Error fetching travel time for connection:', error)
+              }
+            }
+            return { ...conn, duration: undefined }
+          })
+        )
+
+        // Update canvas with travel times
+        const finalCanvasData = {
+          ...canvasData,
+          connections: connectionsWithTravelTimes
+        }
+        
+        setCanvasData(finalCanvasData)
         setHasUnsavedChanges(true)
         
         alert(`Optimized route found with ${data.path.length} stops!`)
@@ -387,20 +436,8 @@ export default function TripPage() {
       }
     } catch (error) {
       console.error('Route optimization failed:', error)
-      throw error
+      alert('Failed to optimize route. Please try again.')
     }
-  }
-
-  const removeAllArrows = () => {
-    if (!canvasData) return
-    
-    const updatedCanvasData = {
-      ...canvasData,
-      connections: []
-    }
-    
-    setCanvasData(updatedCanvasData)
-    setHasUnsavedChanges(true)
   }
 
   // Redirect if not authenticated (check supabaseUser for actual auth state)
@@ -526,7 +563,16 @@ export default function TripPage() {
       </button>
 
       <button
-        onClick={removeAllArrows}
+        onClick={() => {
+          if (canvasData) {
+            const updatedCanvasData = {
+              ...canvasData,
+              connections: []
+            }
+            setCanvasData(updatedCanvasData)
+            setHasUnsavedChanges(true)
+          }
+        }}
         disabled={!canvasData || canvasData.connections?.length === 0}
         className="text-sm px-3 py-1.5 rounded-md bg-red-600/90 hover:bg-red-700/90 text-white disabled:opacity-50 backdrop-blur-sm transition-all"
       >
