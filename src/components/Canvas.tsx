@@ -44,7 +44,6 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
   } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Notify parent of data changes
   const notifyDataChange = useCallback((newBoxes: Box[], newConnections: Connection[]) => {
@@ -172,31 +171,6 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
   };
 
 
-  // Import JSON
-  const handleImportClick = () => fileInputRef.current?.click();
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const result = event.target?.result as string;
-        const parsed = JSON.parse(result);
-
-        if (parsed.boxes && parsed.connections) {
-          setBoxes(parsed.boxes);
-          setConnections(parsed.connections);
-          notifyDataChange(parsed.boxes, parsed.connections);
-        } else {
-          alert("Invalid file format");
-        }
-      } catch {
-        alert("Failed to parse JSON file");
-      }
-    };
-    reader.readAsText(file);
-  };
 
   // Get attachment coordinates
   const getAttachmentPoint = (
@@ -226,28 +200,6 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* Toolbar actions */}
-      <div className="absolute top-5 right-45 flex gap-3 z-10">
-        <button
-          onClick={removeAllConnections}
-          className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 text-sm"
-        >
-          Remove All Arrows
-        </button>
-        <button
-          onClick={handleImportClick}
-          className="px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 text-sm"
-        >
-          Import
-        </button>
-        <input
-          type="file"
-          ref={fileInputRef}
-          accept="application/json"
-          className="hidden"
-          onChange={handleImport}
-        />
-      </div>
 
       {/* Connection lines */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none">
