@@ -227,7 +227,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
       onMouseUp={handleMouseUp}
     >
       {/* Toolbar actions */}
-      <div className="absolute top-5 right-5 flex gap-3 z-10">
+      <div className="absolute top-5 right-45 flex gap-3 z-10">
         <button
           onClick={removeAllConnections}
           className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 text-sm"
