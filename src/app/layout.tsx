@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MQuest - Collaborative Trip Planning",
+  title: "MQuest",
   description: "Plan your next adventure with friends using MQuest",
 };
 

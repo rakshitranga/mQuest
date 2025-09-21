@@ -201,7 +201,7 @@ export default function TripPage() {
   }
 
   const copyShareLink = () => {
-    const shareUrl = `${window.location.origin}/trip/${tripId}`
+    const shareUrl = `${window.location.origin}/trip/${tripId}/share`
     navigator.clipboard.writeText(shareUrl)
     alert('Share link copied to clipboard!')
   }

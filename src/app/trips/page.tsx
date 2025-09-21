@@ -11,6 +11,10 @@ export default function TripsPage() {
   const [trips, setTrips] = useState<Trip[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isCreatingTrip, setIsCreatingTrip] = useState(false)
+  const [newTripTitle, setNewTripTitle] = useState('')
+  const [newTripDescription, setNewTripDescription] = useState('')
+  const [copiedTripId, setCopiedTripId] = useState<string | null>(null)
   const [deletingTripId, setDeletingTripId] = useState<string | null>(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [tripToDelete, setTripToDelete] = useState<Trip | null>(null)
@@ -56,9 +60,27 @@ export default function TripsPage() {
     }
   }
 
-  const confirmDelete = (trip: Trip) => {
+  const handleDeleteTrip = async (trip: Trip) => {
     setTripToDelete(trip)
     setShowDeleteModal(true)
+  }
+
+  const handleShareTrip = async (tripId: string) => {
+    const shareUrl = `${window.location.origin}/trip/${tripId}/share`
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopiedTripId(tripId)
+      
+      // Reset the copied state after 2 seconds
+      setTimeout(() => {
+        setCopiedTripId(null)
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err)
+      // Fallback: show the URL in an alert
+      alert(`Share this trip: ${shareUrl}`)
+    }
   }
 
   const deleteTrip = async () => {
@@ -133,15 +155,30 @@ export default function TripsPage() {
                     {trip.description || 'No description'}
                   </p>
                 </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    confirmDelete(trip)
-                  }}
-                  className="text-sm text-red-600 hover:text-red-800"
-                >
-                  Delete
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleShareTrip(trip.id)
+                    }}
+                    className={`text-sm transition-colors ${
+                      copiedTripId === trip.id 
+                        ? 'text-green-600' 
+                        : 'text-blue-600 hover:text-blue-800'
+                    }`}
+                  >
+                    {copiedTripId === trip.id ? 'Copied!' : 'Share'}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteTrip(trip)
+                    }}
+                    className="text-sm text-red-600 hover:text-red-800"
+                  >
+                    Delete
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
