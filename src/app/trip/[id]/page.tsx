@@ -372,27 +372,18 @@ export default function TripPage() {
       const data = await response.json()
 
       if (data.success) {
-        // Add "Calculating..." duration to all new connections
-        const connectionsWithDuration = data.connections.map((conn: any) => ({
-          ...conn,
-          duration: 'Calculating...'
-        }))
-
-        // Update canvas with optimized connections
-        const updatedCanvasData = {
-          ...canvasData,
-          connections: connectionsWithDuration
-        }
-        
-        setCanvasData(updatedCanvasData)
-        setHasUnsavedChanges(true)
-        
-        // Calculate travel times for each connection
+        // Use durations from optimize API if available, otherwise calculate them
         const boxes = canvasData.boxes || []
         const connectionsWithTravelTimes = await Promise.all(
-          connectionsWithDuration.map(async (conn: any) => {
-            const fromBox = boxes.find(b => b.id === conn.from)
-            const toBox = boxes.find(b => b.id === conn.to)
+          data.connections.map(async (conn: any) => {
+            // If the optimize API already provided a duration, use it
+            if (conn.duration && conn.duration !== 'Calculating...') {
+              return conn;
+            }
+            
+            // Otherwise, calculate the travel time
+            const fromBox = boxes.find((b: any) => b.id === conn.from)
+            const toBox = boxes.find((b: any) => b.id === conn.to)
             
             if (fromBox && toBox && fromBox.address && toBox.address && 
                 fromBox.address.trim() !== '' && toBox.address.trim() !== '') {
@@ -417,11 +408,11 @@ export default function TripPage() {
                 console.error('Error fetching travel time for connection:', error)
               }
             }
-            return { ...conn, duration: undefined }
+            return { ...conn, duration: 'Calculating...' }
           })
         )
 
-        // Update canvas with travel times
+        // Update canvas with optimized route and travel times
         const finalCanvasData = {
           ...canvasData,
           connections: connectionsWithTravelTimes

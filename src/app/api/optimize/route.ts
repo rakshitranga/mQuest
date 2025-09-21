@@ -15,6 +15,7 @@ interface Connection {
   fromSide: "top" | "bottom";
   to: string;
   toSide: "top" | "bottom";
+  duration?: string;
 }
 
 interface OptimizeRequest {
@@ -33,30 +34,50 @@ async function getOptimizedRoute(boxes: Box[], startId: string, endId: string): 
       throw new Error('Start or end box not found');
     }
 
-    // Create location list for Gemini
-    const locationList = boxes.map(box => `"${box.id}": {"title": "${box.title}", "address": "${box.address || box.title}"}`).join(', ');
+    // Create location list for Gemini (excluding x, y coordinates as they're irrelevant for route optimization)
+    const locationList = boxes.map(box => {
+      // Only include relevant data for route optimization
+      const relevantData = {
+        title: box.title,
+        address: box.address || box.title,
+        description: box.description || ''
+      };
+      return `"${box.id}": ${JSON.stringify(relevantData)}`;
+    }).join(', ');
     
     const prompt = `I have these locations: {${locationList}}. 
     
-Find the optimal driving route from "${startBox.title}" at "${startBox.address || startBox.title}" (ID: ${startId}) to "${endBox.title}" at "${endBox.address || endBox.title}" (ID: ${endId}) that visits ALL locations exactly once (Traveling Salesman Problem). The route must go through every single location on the canvas.
+Find the optimal driving route from "${startBox.title}" at "${startBox.address || startBox.title}" (ID: ${startId}) to "${endBox.title}" at "${endBox.address || endBox.title}" (ID: ${endId}) that visits ALL locations exactly once (Traveling Salesman Problem). 
 
-Use Google Maps to get real driving times and distances between all locations using their addresses for accurate routing. Return ONLY a JSON object in this exact format:
+Use Google Maps to calculate real driving times and distances between all locations using their addresses. Optimize for the shortest total travel time. Return ONLY a JSON object in this exact format:
 
 {
   "path": ["${startId}", "box_id_2", "box_id_3", "box_id_4", "${endId}"],
   "connections": [
-    {"from": "${startId}", "fromSide": "bottom", "to": "box_id_2", "toSide": "top"},
-    {"from": "box_id_2", "fromSide": "bottom", "to": "box_id_3", "toSide": "top"},
-    {"from": "box_id_3", "fromSide": "bottom", "to": "box_id_4", "toSide": "top"},
-    {"from": "box_id_4", "fromSide": "bottom", "to": "${endId}", "toSide": "top"}
+    {"from": "${startId}", "fromSide": "bottom", "to": "box_id_2", "toSide": "top", "duration": "15 mins"},
+    {"from": "box_id_2", "fromSide": "bottom", "to": "box_id_3", "toSide": "top", "duration": "22 mins"},
+    {"from": "box_id_3", "fromSide": "bottom", "to": "box_id_4", "toSide": "top", "duration": "8 mins"},
+    {"from": "box_id_4", "fromSide": "bottom", "to": "${endId}", "toSide": "top", "duration": "12 mins"}
   ]
 }
 
-IMPORTANT: The path array must contain ALL ${boxes.length} location IDs, starting with "${startId}" and ending with "${endId}". Every location must be visited exactly once in the most time-efficient order.`;
+IMPORTANT: 
+1. The path array must contain ALL ${boxes.length} location IDs, starting with "${startId}" and ending with "${endId}". 
+2. Every location must be visited exactly once in the most time-efficient order.
+3. Each connection MUST include a "duration" field with the actual driving time (e.g., "15 mins", "1h 30m").
+4. Use Google Maps to get accurate travel times between consecutive locations in your optimized path.`;
 
-    const system = `You are a route optimization expert with access to Google Maps services. Use the maps tools to get accurate driving directions and travel times between locations. Analyze all possible routes and return the most time-efficient path. Always return valid JSON only, no explanations.`;
+    const system = `You are a route optimization expert with access to Google Maps services. Use the maps tools efficiently to get driving times between locations. For ${boxes.length} locations, use a greedy nearest-neighbor approach for speed: from each location, go to the nearest unvisited location. Don't calculate all possible permutations. Return valid JSON only, no explanations.`;
     
-    const response = await geminiMaps(prompt, system);
+    // Add timeout for faster response
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Route optimization timeout')), 15000); // 15 second timeout
+    });
+    
+    const response = await Promise.race([
+      geminiMaps(prompt, system),
+      timeoutPromise
+    ]) as string;
     
     // Parse JSON response
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -103,7 +124,8 @@ IMPORTANT: The path array must contain ALL ${boxes.length} location IDs, startin
         from: fallbackPath[i],
         fromSide: "bottom",
         to: fallbackPath[i + 1],
-        toSide: "top"
+        toSide: "top",
+        duration: "Calculating..." // Will be calculated by Canvas component
       });
     }
     

@@ -50,29 +50,143 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
     side: "top" | "bottom";
   } | null>(null);
 
-  // Fetch travel time between two locations
+  // Validate address format
+  const isValidAddress = (address: string): boolean => {
+    if (!address || address.trim().length < 3) return false;
+    // Basic validation: should contain at least some alphanumeric characters
+    return /[a-zA-Z0-9]/.test(address.trim());
+  };
+
+  // Retry function for API calls
+  const retryWithBackoff = async <T,>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<T> => {
+    let lastError: Error;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        if (attempt === maxRetries - 1) {
+          throw lastError;
+        }
+        
+        // Exponential backoff with jitter
+        const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    throw lastError!;
+  };
+
+  // Fetch travel time between two locations with improved error handling
   const fetchTravelTime = async (fromAddress: string, toAddress: string): Promise<string> => {
+    // Validate addresses first
+    if (!isValidAddress(fromAddress) || !isValidAddress(toAddress)) {
+      console.warn('Invalid addresses provided:', { fromAddress, toAddress });
+      return 'Invalid Address';
+    }
+
     try {
-      const response = await fetch('/api/plan', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt: `Get driving directions and travel time from "${fromAddress}" to "${toAddress}". Only return the travel time duration (e.g., "15 mins", "1 hour 30 mins").`,
-          system: `You are a travel time calculator. Use Google Maps services to get the driving time between two locations. Return ONLY the travel duration in a simple format like "15 mins", "1 hour 30 mins", or "2 hours". Do not include any other text or explanations.`
-        }),
+      const result = await retryWithBackoff(async () => {
+        const response = await fetch('/api/plan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prompt: `Get driving directions and travel time from "${fromAddress.trim()}" to "${toAddress.trim()}". Only return the travel time duration (e.g., "15 mins", "1 hour 30 mins").`,
+            system: `You are a travel time calculator. Use Google Maps services to get the driving time between two locations. Return ONLY the travel duration in a simple format like "15 mins", "1 hour 30 mins", or "2 hours". Do not include any other text or explanations.`
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (!data.ok) {
+          throw new Error(data.error || 'API returned error');
+        }
+        
+        if (!data.text) {
+          throw new Error('No response text received');
+        }
+        
+        return data.text;
       });
 
-      const data = await response.json();
-      if (data.ok && data.text) {
-        // Extract just the time duration from the response
-        const timeMatch = data.text.match(/(\d+\s*(?:hour|hr|h)?\s*\d*\s*(?:minute|min|m)?s?)/i);
-        return timeMatch ? timeMatch[0] : 'Unknown';
+      // Improved regex to catch more time formats
+      const timePatterns = [
+        /(\d+)\s*(?:hours?|hrs?|h)\s*(?:and\s*)?(\d+)?\s*(?:minutes?|mins?|m)?/i,
+        /(\d+)\s*(?:minutes?|mins?|m)/i,
+        /(\d+)\s*(?:hours?|hrs?|h)/i,
+        /(\d+):(\d+)/i, // Format like "1:30"
+      ];
+      
+      for (const pattern of timePatterns) {
+        const match = result.match(pattern);
+        if (match) {
+          if (pattern === timePatterns[0]) { // hours and minutes
+            const hours = parseInt(match[1]);
+            const minutes = match[2] ? parseInt(match[2]) : 0;
+            if (hours > 0 && minutes > 0) {
+              return `${hours}h ${minutes}m`;
+            } else if (hours > 0) {
+              return `${hours}h`;
+            } else if (minutes > 0) {
+              return `${minutes}m`;
+            }
+          } else if (pattern === timePatterns[3]) { // HH:MM format
+            const hours = parseInt(match[1]);
+            const minutes = parseInt(match[2]);
+            if (hours > 0 && minutes > 0) {
+              return `${hours}h ${minutes}m`;
+            } else if (hours > 0) {
+              return `${hours}h`;
+            } else if (minutes > 0) {
+              return `${minutes}m`;
+            }
+          } else {
+            return match[0].trim();
+          }
+        }
       }
+      
+      // If no pattern matches, return the first part of the response
+      const words = result.trim().split(/\s+/);
+      if (words.length >= 2) {
+        return words.slice(0, 2).join(' ');
+      }
+      
       return 'Unknown';
     } catch (error) {
-      console.error('Error fetching travel time:', error);
+      console.error('Error fetching travel time:', {
+        error: error instanceof Error ? error.message : String(error),
+        fromAddress,
+        toAddress,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Return more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('HTTP 500')) {
+          return 'Server Error';
+        } else if (error.message.includes('HTTP 429')) {
+          return 'Rate Limited';
+        } else if (error.message.includes('HTTP 401') || error.message.includes('HTTP 403')) {
+          return 'Auth Error';
+        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+          return 'Network Error';
+        }
+      }
+      
       return 'Unknown';
     }
   };
