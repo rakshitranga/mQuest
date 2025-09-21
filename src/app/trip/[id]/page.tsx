@@ -218,7 +218,7 @@ export default function TripPage() {
       y: window.innerHeight - 200, // Bottom left corner - y position
       title: suggestion.title,
       description: suggestion.description,
-      address: suggestion.title // Use title as default address
+      address: suggestion.address || suggestion.title // Use actual address from suggestion
     }
     
     const updatedCanvasData = {

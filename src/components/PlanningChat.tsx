@@ -14,6 +14,7 @@ interface LocationSuggestion {
   id: string
   title: string
   description: string
+  address: string
 }
 
 interface PlanningChatProps {
@@ -36,6 +37,7 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isListening, setIsListening] = useState(false)
+  const [isVoiceMode, setIsVoiceMode] = useState(false)
   const [recognition, setRecognition] = useState<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -84,6 +86,17 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
     }
   }, [isOpen])
 
+  // Auto-send in voice mode when message is set and not listening
+  useEffect(() => {
+    if (isVoiceMode && inputMessage.trim() && !isListening && !isLoading) {
+      const timer = setTimeout(() => {
+        sendMessage()
+      }, 500) // Small delay to ensure speech recognition is complete
+      
+      return () => clearTimeout(timer)
+    }
+  }, [inputMessage, isVoiceMode, isListening, isLoading])
+
   // Parse location suggestions from AI response
   const parseLocationSuggestions = (text: string): LocationSuggestion[] => {
     const suggestions: LocationSuggestion[] = []
@@ -96,10 +109,53 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
       if (match && suggestions.length < 4) {
         const title = match[1].trim()
         const description = match[2]?.trim() || `Explore ${title}`
+        
+        // Extract address from the description or subsequent lines
+        let address = ''
+        
+        // First, check if there's an explicit "Address:" line following this suggestion
+        for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+          const nextLine = lines[j].trim()
+          const addressLineMatch = nextLine.match(/^(?:Address:\s*)?(.+)/)
+          if (addressLineMatch && nextLine.toLowerCase().includes('address:')) {
+            address = addressLineMatch[1].trim()
+            break
+          }
+        }
+        
+        // If no explicit address line, look for address patterns in description or subsequent lines
+        if (!address) {
+          const addressPatterns = [
+            /(\d+\s+[A-Za-z\s]+(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ln|Lane|Way|Ct|Court|Pl|Place)\.?(?:\s*,\s*[A-Za-z\s]+)?(?:\s*,\s*[A-Z]{2})?(?:\s*\d{5})?)/i,
+            /([A-Za-z\s]+(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ln|Lane|Way|Ct|Court|Pl|Place)\.?(?:\s*,\s*[A-Za-z\s]+)?(?:\s*,\s*[A-Z]{2})?(?:\s*\d{5})?)/i,
+            /([\w\s]+,\s*[A-Za-z\s]+,\s*[A-Z]{2}(?:\s*\d{5})?)/i,
+            /([A-Za-z\s]+(?:Bridge|Island|Wharf|Park|Museum|Center|Plaza|Square|Building|Tower|Mall|Market)(?:\s*,\s*[A-Za-z\s]+)?(?:\s*,\s*[A-Z]{2})?(?:\s*\d{5})?)/i
+          ]
+          
+          // Check current line and next few lines for address patterns
+          for (let j = i; j < Math.min(i + 3, lines.length); j++) {
+            const checkLine = lines[j].trim()
+            for (const pattern of addressPatterns) {
+              const addressMatch = checkLine.match(pattern)
+              if (addressMatch) {
+                address = addressMatch[1] || addressMatch[0]
+                break
+              }
+            }
+            if (address) break
+          }
+        }
+        
+        // If no address found, create a generic one based on the title
+        if (!address) {
+          address = `${title}, City, State`
+        }
+        
         suggestions.push({
           id: `suggestion-${Date.now()}-${suggestions.length}`,
           title,
-          description
+          description,
+          address: address.trim()
         })
       }
     }
@@ -131,13 +187,18 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
           prompt: inputMessage.trim(),
           system: `You are a helpful AI trip planning assistant named M.Q. for a trip called "${tripTitle}". You have access to Google Maps services to help with location searches, directions, travel times, and place details. Be concise but helpful, and a little witty and goofy, in your responses. Focus on practical travel advice and specific recommendations.
 
-When providing location recommendations, format them as a numbered list with location names in bold (**Location Name**) followed by a dash and brief description. Include specific addresses when possible. For example:
-1. **Golden Gate Bridge** - Iconic suspension bridge with stunning views at Golden Gate Bridge, San Francisco, CA
-2. **Alcatraz Island** - Historic former prison with guided tours at Alcatraz Island, San Francisco, CA 94133
-3. **Fisherman's Wharf** - Waterfront area with shops and restaurants at Pier 39, San Francisco, CA 94133
-4. **Lombard Street** - Famous winding street known as the crookedest in the world at Lombard St, San Francisco, CA
+IMPORTANT: When providing location recommendations, ALWAYS format them as a numbered list with location names in bold (**Location Name**) followed by a dash and brief description. ALWAYS include the complete, specific street address on the same line or the next line. For example:
 
-This helps users drag these locations directly to their trip canvas with accurate addresses for route optimization.`
+1. **Golden Gate Bridge** - Iconic suspension bridge with stunning views
+   Address: Golden Gate Bridge, San Francisco, CA 94129
+2. **Alcatraz Island** - Historic former prison with guided tours  
+   Address: Alcatraz Island, San Francisco, CA 94133
+3. **Fisherman's Wharf** - Waterfront area with shops and restaurants
+   Address: Pier 39, San Francisco, CA 94133
+4. **Lombard Street** - Famous winding street known as the crookedest in the world
+   Address: Lombard St, San Francisco, CA 94133
+
+Always provide real, complete addresses including street numbers, street names, city, state, and zip code when available. This is crucial for users to add locations to their trip canvas with accurate addresses for route optimization and navigation.`
         }),
       })
 
@@ -192,6 +253,14 @@ This helps users drag these locations directly to their trip canvas with accurat
       recognition.stop()
       setIsListening(false)
     }
+  }
+
+  const toggleMode = () => {
+    setIsVoiceMode(!isVoiceMode)
+    if (isListening) {
+      stopListening()
+    }
+    setInputMessage('')
   }
 
   if (!isOpen) return null
@@ -316,49 +385,88 @@ This helps users drag these locations directly to their trip canvas with accurat
 
         {/* Input */}
         <div className="p-4 border-t bg-gray-50 rounded-bl-2xl text-black">
-          <div className="flex gap-2">
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder={isListening ? "Listening..." : "Ask about destinations, routes, travel times..."}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              disabled={isLoading || isListening}
-            />
-            
-            {/* Microphone Button */}
+          {/* Mode Toggle */}
+          <div className="flex gap-2 mb-3">
             <button
-              onClick={isListening ? stopListening : startListening}
-              disabled={isLoading}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                isListening 
-                  ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-                  : 'bg-gray-500 hover:bg-gray-600 text-white'
-              } disabled:bg-gray-300 disabled:cursor-not-allowed`}
-              title={isListening ? "Stop listening" : "Start voice input"}
+              onClick={toggleMode}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                !isVoiceMode 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
-              {isListening ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 6h12v12H6z"/>
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2c1.1 0 2 .9 2 2v6c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H6c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                </svg>
-              )}
+              💬 Chat Mode
             </button>
+            <button
+              onClick={toggleMode}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                isVoiceMode 
+                  ? 'bg-blue-500 text-white' 
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              🎤 Voice Mode
+            </button>
+          </div>
 
-            <button
-              onClick={sendMessage}
-              disabled={!inputMessage.trim() || isLoading}
-              className="px-4 py-2 bg-[#D2B48C] text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
+          <div className="flex gap-2">
+            {isVoiceMode ? (
+              /* Voice Mode Interface */
+              <>
+                <div className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-sm flex items-center justify-center">
+                  {isListening ? (
+                    <span className="text-red-600 animate-pulse">🎤 Listening...</span>
+                  ) : (
+                    <span className="text-gray-600">Click microphone to speak</span>
+                  )}
+                </div>
+                
+                <button
+                  onClick={isListening ? stopListening : startListening}
+                  disabled={isLoading}
+                  className={`px-4 py-2 rounded-lg transition-colors ${
+                    isListening 
+                      ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
+                      : 'bg-green-500 hover:bg-green-600 text-white'
+                  } disabled:bg-gray-300 disabled:cursor-not-allowed`}
+                  title={isListening ? "Stop listening" : "Start speaking"}
+                >
+                  {isListening ? (
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M6 6h12v12H6z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2c1.1 0 2 .9 2 2v6c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H6c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                  )}
+                </button>
+              </>
+            ) : (
+              /* Chat Mode Interface */
+              <>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask about destinations, routes, travel times..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  disabled={isLoading}
+                />
+                
+                <button
+                  onClick={sendMessage}
+                  disabled={!inputMessage.trim() || isLoading}
+                  className="px-4 py-2 bg-[#D2B48C] text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
