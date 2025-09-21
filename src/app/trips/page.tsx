@@ -100,7 +100,7 @@ export default function TripsPage() {
       {/* Left Panel - Trip List */}
       <div className="w-full md:w-1/2 lg:w-2/5 p-8 overflow-y-auto">
         <header className="mb-8 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-800">MQuest</h1>
+          <img src="/mquest_logo.png" alt="MQuest Logo" className="w-24" />
           <button
             onClick={handleSignOut}
             className="text-sm text-gray-600 hover:text-gray-800"

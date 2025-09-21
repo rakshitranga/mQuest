@@ -90,7 +90,7 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
   useEffect(() => {
     if (isVoiceMode && inputMessage.trim() && !isListening && !isLoading) {
       const timer = setTimeout(() => {
-        sendMessage()
+        handleSendMessage()
       }, 500) // Small delay to ensure speech recognition is complete
       
       return () => clearTimeout(timer)
@@ -163,8 +163,20 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
     return suggestions
   }
 
-  const sendMessage = async () => {
-    if (!inputMessage.trim() || isLoading) return
+  // Get last 3 messages for context (excluding the current message being sent)
+  const getRecentContext = () => {
+    const recentMessages = messages.slice(-3);
+    if (recentMessages.length === 0) return '';
+    
+    const contextString = recentMessages
+      .map(msg => `${msg.type === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+      .join('\n');
+    
+    return `\n\nRecent conversation:\n${contextString}\n\nCurrent message:`;
+  };
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim()) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -184,7 +196,7 @@ export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onA
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: inputMessage.trim(),
+          prompt: `${getRecentContext()} ${inputMessage.trim()}`,
           system: `You are a helpful AI trip planning assistant named M.Q. for a trip called "${tripTitle}". You have access to Google Maps services to help with location searches, directions, travel times, and place details. Be concise but helpful, and a little witty and goofy, in your responses. Focus on practical travel advice and specific recommendations.
 
 IMPORTANT: When providing location recommendations, ALWAYS format them as a numbered list with location names in bold (**Location Name**) followed by a dash and brief description. ALWAYS include the complete, specific street address on the same line or the next line. For example:
@@ -236,7 +248,7 @@ Always provide real, complete addresses including street numbers, street names, 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      handleSendMessage()
     }
   }
 
@@ -457,7 +469,7 @@ Always provide real, complete addresses including street numbers, street names, 
                 />
                 
                 <button
-                  onClick={sendMessage}
+                  onClick={handleSendMessage}
                   disabled={!inputMessage.trim() || isLoading}
                   className="px-4 py-2 bg-[#D2B48C] text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                 >

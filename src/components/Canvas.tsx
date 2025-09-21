@@ -79,6 +79,18 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
 
   const canvasRef = useRef<HTMLDivElement | null>(null);
 
+  // Get last three chat messages for context
+  // const getChatContext = () => {
+  //   const lastThreeMessages = chatMessages.slice(-6); // Get last 6 messages (3 user + 3 assistant pairs)
+  //   if (lastThreeMessages.length === 0) return '';
+    
+  //   const contextString = lastThreeMessages
+  //     .map(msg => `${msg.type === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+  //     .join('\n');
+    
+  //   return `\n\nRecent conversation context:\n${contextString}`;
+  // };
+
   // Notify parent of data changes
   const notifyDataChange = useCallback((newBoxes: Box[], newConnections: Connection[]) => {
     if (onDataChange) {
@@ -374,7 +386,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
         },
         body: JSON.stringify({
           prompt: `Find a fun, interesting landmark or tourist attraction along the route from "${fromBox.address}" to "${toBox.address}". Return only the landmark name and complete address in this exact format: "Name: [Landmark Name]\nAddress: [Complete Address]"`,
-          system: `You are a fun landmark finder. Use Google Maps services to find an interesting tourist attraction, landmark, or point of interest along the route between two locations. Choose something fun, unique, or historically significant that travelers would enjoy visiting. Return ONLY the landmark name and address in the specified format.`
+          system: `You are a fun landmark finder. Use Google Maps services to find an interesting tourist attraction, landmark, or point of interest along the route between two locations. Choose something fun, unique, or historically significant that travelers would enjoy visiting. Make sure it doesn't stray far away from the route. Return ONLY the landmark name and address in the specified format.`
         }),
       });
 
