@@ -121,5 +121,29 @@ export const dbHelpers = {
     
     if (error) throw error
     return data
+  },
+
+  // Delete trip
+  async deleteTrip(tripId: string) {
+    const { data, error } = await supabase
+      .from('trips')
+      .delete()
+      .eq('id', tripId)
+      .select()
+    
+    if (error) throw error
+    return data
+  },
+
+  // Create user
+  async createUser(userData: Omit<User, 'id'> & { id: string }) {
+    const { data, error } = await supabase
+      .from('users')
+      .insert(userData)
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
   }
 }

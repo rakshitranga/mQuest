@@ -4,9 +4,13 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function LoginForm() {
-  const { signInWithGoogle } = useAuth()
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isSignUp, setIsSignUp] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
 
   const handleGoogleSignIn = async () => {
     try {
@@ -16,6 +20,37 @@ export default function LoginForm() {
     } catch (error) {
       console.error('Sign in error:', error)
       setError('Failed to sign in with Google. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!email || !password) {
+      setError('Please fill in all fields.')
+      return
+    }
+
+    if (isSignUp && !name) {
+      setError('Please enter your name.')
+      return
+    }
+
+    try {
+      setLoading(true)
+      setError(null)
+      
+      if (isSignUp) {
+        await signUpWithEmail(email, password, name)
+        setError('Account created! Please check your email to verify your account.')
+      } else {
+        await signInWithEmail(email, password)
+      }
+    } catch (error: any) {
+      console.error('Auth error:', error)
+      setError(error.message || `Failed to ${isSignUp ? 'sign up' : 'sign in'}. Please try again.`)
     } finally {
       setLoading(false)
     }
@@ -38,9 +73,13 @@ export default function LoginForm() {
               <div className="w-20 h-1 bg-gradient-to-r from-blue-500 to-purple-500 mx-auto mt-4 rounded-full"></div>
             </div>
             
-            {/* Error message */}
+            {/* Error/Success message */}
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl shadow-sm">
+              <div className={`mb-6 p-4 border rounded-2xl shadow-sm ${
+                error.includes('Account created') 
+                  ? 'bg-green-50 border-green-200 text-green-700' 
+                  : 'bg-red-50 border-red-200 text-red-700'
+              }`}>
                 <div className="flex items-center">
                   <svg className="w-5 h-5 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -50,7 +89,87 @@ export default function LoginForm() {
               </div>
             )}
             
-            {/* Sign in button */}
+            {/* Email/Password Form */}
+            <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
+              {isSignUp && (
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Full Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all duration-200 placeholder-gray-800 text-black"
+                    disabled={loading}
+                  />
+                </div>
+              )}
+              
+              <div>
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all duration-200 placeholder-gray-800 text-black"
+                  disabled={loading}
+                />
+              </div>
+              
+              <div>
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all duration-200 placeholder-gray-800 text-black"
+                  disabled={loading}
+                />
+              </div>
+              
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    {isSignUp ? 'Creating Account...' : 'Signing In...'}
+                  </div>
+                ) : (
+                  isSignUp ? 'Create Account' : 'Sign In'
+                )}
+              </button>
+            </form>
+            
+            {/* Toggle Sign Up/Sign In */}
+            <div className="text-center mb-6">
+              <button
+                onClick={() => {
+                  setIsSignUp(!isSignUp)
+                  setError(null)
+                  setEmail('')
+                  setPassword('')
+                  setName('')
+                }}
+                className="text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                disabled={loading}
+              >
+                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+              </button>
+            </div>
+            
+            {/* Divider */}
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-200"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white text-gray-500 font-medium">or continue with</span>
+              </div>
+            </div>
+            
+            {/* Google Sign in button */}
             <button
               onClick={handleGoogleSignIn}
               disabled={loading}

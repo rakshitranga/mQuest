@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { Trip, User, dbHelpers } from '@/lib/supabase'
@@ -12,7 +12,7 @@ import OptimizeButton from '@/components/OptimizeButton'
 import OptimizeModal from '@/components/OptimizeModal'
 
 export default function TripPage() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, supabaseUser, loading: authLoading } = useAuth()
   const [trip, setTrip] = useState<Trip | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -23,76 +23,105 @@ export default function TripPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [isOptimizeOpen, setIsOptimizeOpen] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
   const router = useRouter()
   const params = useParams()
   const tripId = params.id as string
 
+  // Load canvas data immediately from cache on component mount
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/')
-      return
-    }
-
-    if (user && tripId) {
-      loadTrip()
-    }
-  }, [user, authLoading, tripId, router])
-
-  // Load canvas data from localStorage when chat closes
-  useEffect(() => {
-    if (!isChatOpen && tripId) {
+    if (tripId) {
+      // Try to load from localStorage immediately
       const savedCanvasData = localStorage.getItem(`canvas-${tripId}`)
       if (savedCanvasData) {
         try {
           const parsedData = JSON.parse(savedCanvasData)
-          // Force update by creating a new object reference
-          setCanvasData({ ...parsedData })
-          setHasUnsavedChanges(true)
+          setCanvasData(parsedData)
+          console.log('Loaded canvas from localStorage cache')
         } catch (error) {
           console.error('Error parsing localStorage canvas data:', error)
+          setCanvasData({ boxes: [], connections: [] })
         }
-      }
-    }
-  }, [isChatOpen, tripId])
-
-  // Save canvas data to localStorage on change (debounced)
-  useEffect(() => {
-    if (canvasData && tripId) {
-      const timeoutId = setTimeout(() => {
-        localStorage.setItem(`canvas-${tripId}`, JSON.stringify(canvasData))
-      }, 100) // Debounce localStorage writes
-      
-      return () => clearTimeout(timeoutId)
-    }
-  }, [canvasData, tripId])
-
-  const loadTrip = async () => {
-    try {
-      setLoading(true)
-      const tripData = await dbHelpers.getTripById(tripId)
-      setTrip(tripData)
-      // Load canvas data from trip_data or initialize empty
-      if (tripData.trip_data?.canvas) {
-        setCanvasData(tripData.trip_data.canvas)
       } else {
         setCanvasData({ boxes: [], connections: [] })
       }
-    } catch (error) {
-      console.error('Error loading trip:', error)
-      setError('Failed to load trip')
-      // Initialize empty canvas data even on error to prevent black screen
-      setCanvasData({ boxes: [], connections: [] })
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [tripId])
+
+  const loadTrip = useCallback(async (isRetry = false) => {
+    try {
+      if (!isRetry) {
+        setLoading(true)
+      }
+      
+      // Load trip data from database (for metadata, permissions, etc.)
+      const tripData = await dbHelpers.getTripById(tripId)
+      setTrip(tripData)
+      setRetryCount(0) // Reset retry count on success
+      setError(null) // Clear any previous errors
+      
+      // Only load database canvas data if we don't have localStorage data
+      if (!canvasData || (canvasData.boxes?.length === 0 && canvasData.connections?.length === 0)) {
+        if (tripData.trip_data?.canvas) {
+          setCanvasData(tripData.trip_data.canvas)
+          // Cache it immediately to localStorage
+          localStorage.setItem(`canvas-${tripId}`, JSON.stringify(tripData.trip_data.canvas))
+          console.log('Loaded canvas from database and cached to localStorage')
+        }
+      }
+      
+      console.log('Successfully loaded trip from database')
+      
+    } catch (error) {
+      console.error(`Error loading trip (attempt ${retryCount + 1}):`, error)
+      
+      // Keep localStorage data even if database fails
+      if (!canvasData) {
+        setCanvasData({ boxes: [], connections: [] })
+      }
+      
+      // Retry logic with exponential backoff
+      const newRetryCount = retryCount + 1
+      setRetryCount(newRetryCount)
+      
+      if (newRetryCount <= 10) { // Max 10 retries
+        const delay = Math.min(1000 * Math.pow(2, newRetryCount - 1), 30000) // Cap at 30 seconds
+        setError(`Retrying database connection... (attempt ${newRetryCount}/10)`)
+        
+        setTimeout(() => {
+          console.log(`Retrying database load in ${delay}ms (attempt ${newRetryCount})`)
+          loadTrip(true)
+        }, delay)
+      } else {
+        setError('Unable to connect to database. Working in offline mode.')
+      }
+    } finally {
+      if (!isRetry) {
+        setLoading(false)
+      }
+    }
+  }, [tripId, canvasData, retryCount])
+
+  useEffect(() => {
+    if (!authLoading && !supabaseUser) {
+      router.push('/')
+      return
+    }
+
+    // Wait for both supabaseUser AND user profile to be ready before loading trip
+    if (supabaseUser && user && tripId) {
+      loadTrip()
+    }
+  }, [supabaseUser, user, authLoading, tripId, router, loadTrip])
+
+  // Note: Canvas data is only cached when user explicitly saves
 
   const joinTrip = async () => {
-    if (!user || !trip) return
+    if (!user || !currentTrip) return
 
     try {
       setIsJoining(true)
-      await dbHelpers.addCollaboratorToTrip(trip.id, user.id)
+      await dbHelpers.addCollaboratorToTrip(currentTrip?.id || tripId, user?.id || '')
       await loadTrip() // Reload trip data
     } catch (error) {
       console.error('Error joining trip:', error)
@@ -103,10 +132,10 @@ export default function TripPage() {
   }
 
   const updateTrip = async (updates: Partial<Trip>) => {
-    if (!trip) return
+    if (!currentTrip) return
 
     try {
-      const updatedTrip = await dbHelpers.updateTrip(trip.id, updates)
+      const updatedTrip = await dbHelpers.updateTrip(currentTrip.id, updates)
       setTrip(updatedTrip)
     } catch (error) {
       console.error('Error updating trip:', error)
@@ -115,19 +144,24 @@ export default function TripPage() {
   }
 
   const saveCanvasData = async () => {
-    if (!trip || !canvasData) return
+    if (!currentTrip || !canvasData) return
 
     try {
       setIsSaving(true)
-      const updatedTrip = await dbHelpers.updateTrip(trip.id, {
+      const updatedTrip = await dbHelpers.updateTrip(currentTrip?.id || tripId, {
         trip_data: {
-          ...trip.trip_data,
+          ...currentTrip?.trip_data,
           canvas: canvasData
         }
       })
       setTrip(updatedTrip)
       setHasUnsavedChanges(false)
       setError(null)
+      
+      // Cache to localStorage only when user explicitly saves
+      localStorage.setItem(`canvas-${tripId}`, JSON.stringify(canvasData))
+      console.log('Canvas data saved to database and cached to localStorage')
+      
     } catch (error) {
       console.error('Error saving canvas:', error)
       setError('Failed to save canvas data')
@@ -145,14 +179,14 @@ export default function TripPage() {
   }
 
   const handleTitleDoubleClick = () => {
-    const isAdmin = trip?.admin_user_id === user?.id
+    const isAdmin = currentTrip?.admin_user_id === user?.id
     if (isAdmin) {
       setIsEditingTitle(true)
     }
   }
 
   const handleTitleSubmit = async (newTitle: string) => {
-    if (trip && newTitle.trim() && newTitle !== trip.title) {
+    if (currentTrip && newTitle.trim() && newTitle !== currentTrip.title) {
       await updateTrip({ title: newTitle.trim() })
     }
     setIsEditingTitle(false)
@@ -235,19 +269,8 @@ export default function TripPage() {
     }
   }
 
-  // Wait for auth, trip data, and canvas data to be ready
-  if (authLoading || loading || !canvasData) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your trip...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
+  // Redirect if not authenticated (check supabaseUser for actual auth state)
+  if (!authLoading && !supabaseUser) {
     return null // Will redirect to login
   }
 
@@ -268,7 +291,8 @@ export default function TripPage() {
     )
   }
 
-  if (!trip) {
+  // Don't show "Trip Not Found" if we have canvas data from localStorage
+  if (!trip && !canvasData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -285,8 +309,22 @@ export default function TripPage() {
     )
   }
 
-  const isAdmin = trip.admin_user_id === user.id
-  const isCollaborator = trip.collaborator_ids.includes(user.id)
+  // Create fallback trip data if we have canvas data but no trip from database
+  const fallbackTrip: Trip | null = !trip && canvasData ? {
+    id: tripId,
+    title: `Trip ${tripId.slice(0, 8)}`,
+    description: 'Offline Trip',
+    admin_user_id: user?.id || '',
+    collaborator_ids: [],
+    is_public: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    trip_data: { canvas: canvasData }
+  } : null
+
+  const currentTrip = trip || fallbackTrip
+  const isAdmin = currentTrip?.admin_user_id === user?.id
+  const isCollaborator = currentTrip?.collaborator_ids.includes(user?.id || '') || false
   const canJoin = !isAdmin && !isCollaborator
 
   return (
@@ -314,20 +352,20 @@ export default function TripPage() {
           {isEditingTitle ? (
             <input
               type="text"
-              defaultValue={trip.title}
+              defaultValue={currentTrip?.title || ''}
               autoFocus
               onBlur={(e) => handleTitleSubmit(e.target.value)}
               onKeyDown={handleTitleKeyDown}
               className="text-lg font-bold text-gray-900 bg-transparent border-none outline-none focus:bg-white rounded px-1 min-w-0"
-              style={{ width: `${Math.max(trip.title.length * 0.6, 8)}ch` }}
+              style={{ width: `${Math.max((currentTrip?.title || '').length * 0.6, 8)}ch` }}
             />
           ) : (
             <h1 
               className="text-lg font-bold text-gray-900 cursor-pointer hover:bg-gray-100 rounded px-1 py-1 transition-colors"
               onDoubleClick={handleTitleDoubleClick}
-              title={trip.admin_user_id === user?.id ? "Double-click to edit" : ""}
+              title={currentTrip?.admin_user_id === user?.id ? "Double-click to edit" : ""}
             >
-              {trip.title}
+              {currentTrip?.title || 'Untitled Trip'}
             </h1>
           )}
         </div>
@@ -389,7 +427,7 @@ export default function TripPage() {
               const url = URL.createObjectURL(blob);
               const link = document.createElement("a");
               link.href = url;
-              link.download = `${trip.title}-canvas.json`;
+              link.download = `${currentTrip?.title || 'trip'}-canvas.json`;
               link.click();
               URL.revokeObjectURL(url);
             }
@@ -435,7 +473,7 @@ export default function TripPage() {
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         onReopen={() => setIsChatOpen(true)}
-        tripTitle={trip.title}
+        tripTitle={currentTrip?.title || 'Untitled Trip'}
         onAddSuggestionToCanvas={addSuggestionToCanvas}
       />
 
