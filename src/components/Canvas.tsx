@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 
 type Box = {
   id: string;
@@ -27,6 +27,14 @@ interface CanvasProps {
 export default function Canvas({ initialData, onDataChange }: CanvasProps) {
   const [boxes, setBoxes] = useState<Box[]>(initialData?.boxes || []);
   const [connections, setConnections] = useState<Connection[]>(initialData?.connections || []);
+
+  // Update state when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setBoxes(initialData.boxes || []);
+      setConnections(initialData.connections || []);
+    }
+  }, [initialData]);
   const [draggingBox, setDraggingBox] = useState<string | null>(null);
   const [offset, setOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [connectingFrom, setConnectingFrom] = useState<{
@@ -47,21 +55,27 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
   // Add box when dropped
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
     const type = e.dataTransfer.getData("type");
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
+    
     if (type === "box") {
-      const newBox: Box = {
-        id: crypto.randomUUID(),
-        x,
-        y,
-        title: "",
-        description: "",
+      const rect = canvasRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      // Get custom title and description from drag data (from chat suggestions)
+      const customTitle = e.dataTransfer.getData("title");
+      const customDescription = e.dataTransfer.getData("description");
+
+      const newBox = {
+        id: `box-${Date.now()}`,
+        x: x - 160, // Center the box (width/2)
+        y: y - 66,  // Center the box (height/2)
+        title: customTitle || "New Location",
+        description: customDescription || "Click to edit description"
       };
+
       const newBoxes = [...boxes, newBox];
       setBoxes(newBoxes);
       notifyDataChange(newBoxes, connections);

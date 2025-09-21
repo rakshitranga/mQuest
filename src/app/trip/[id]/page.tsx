@@ -35,6 +35,34 @@ export default function TripPage() {
     }
   }, [user, authLoading, tripId, router])
 
+  // Load canvas data from localStorage when chat closes
+  useEffect(() => {
+    if (!isChatOpen && tripId) {
+      const savedCanvasData = localStorage.getItem(`canvas-${tripId}`)
+      if (savedCanvasData) {
+        try {
+          const parsedData = JSON.parse(savedCanvasData)
+          // Force update by creating a new object reference
+          setCanvasData({ ...parsedData })
+          setHasUnsavedChanges(true)
+        } catch (error) {
+          console.error('Error parsing localStorage canvas data:', error)
+        }
+      }
+    }
+  }, [isChatOpen, tripId])
+
+  // Save canvas data to localStorage on change (debounced)
+  useEffect(() => {
+    if (canvasData && tripId) {
+      const timeoutId = setTimeout(() => {
+        localStorage.setItem(`canvas-${tripId}`, JSON.stringify(canvasData))
+      }, 100) // Debounce localStorage writes
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [canvasData, tripId])
+
   const loadTrip = async () => {
     try {
       setLoading(true)
@@ -136,6 +164,29 @@ export default function TripPage() {
     navigator.clipboard.writeText(shareUrl)
     // You could add a toast notification here
     alert('Share link copied to clipboard!')
+  }
+
+  const addSuggestionToCanvas = (suggestion: any) => {
+    // Use current state instead of localStorage to avoid parsing
+    const currentCanvasData = canvasData || { boxes: [], connections: [] }
+    const currentBoxes = currentCanvasData.boxes || []
+    
+    const newBox = {
+      id: `suggestion-${Date.now()}`,
+      x: 50, // Bottom left corner - x position
+      y: window.innerHeight - 200, // Bottom left corner - y position
+      title: suggestion.title,
+      description: suggestion.description
+    }
+    
+    const updatedCanvasData = {
+      ...currentCanvasData,
+      boxes: [...currentBoxes, newBox]
+    }
+    
+    // Update state immediately (localStorage will be updated by useEffect)
+    setCanvasData(updatedCanvasData)
+    setHasUnsavedChanges(true)
   }
 
   if (authLoading || loading) {
@@ -328,7 +379,9 @@ export default function TripPage() {
       <PlanningChat
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
+        onReopen={() => setIsChatOpen(true)}
         tripTitle={trip.title}
+        onAddSuggestionToCanvas={addSuggestionToCanvas}
       />
     </div>
   )

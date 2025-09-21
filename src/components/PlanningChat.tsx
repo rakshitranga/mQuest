@@ -7,15 +7,24 @@ interface Message {
   type: 'user' | 'assistant'
   content: string
   timestamp: Date
+  suggestions?: LocationSuggestion[]
+}
+
+interface LocationSuggestion {
+  id: string
+  title: string
+  description: string
 }
 
 interface PlanningChatProps {
   isOpen: boolean
   onClose: () => void
+  onReopen: () => void
   tripTitle: string
+  onAddSuggestionToCanvas: (suggestion: LocationSuggestion) => void
 }
 
-export default function PlanningChat({ isOpen, onClose, tripTitle }: PlanningChatProps) {
+export default function PlanningChat({ isOpen, onClose, onReopen, tripTitle, onAddSuggestionToCanvas }: PlanningChatProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -43,6 +52,29 @@ export default function PlanningChat({ isOpen, onClose, tripTitle }: PlanningCha
     }
   }, [isOpen])
 
+  // Parse location suggestions from AI response
+  const parseLocationSuggestions = (text: string): LocationSuggestion[] => {
+    const suggestions: LocationSuggestion[] = []
+    const lines = text.split('\n')
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      // Look for numbered suggestions or bullet points with location names
+      const match = line.match(/^(?:\d+\.|\*|\-)\s*\*\*(.*?)\*\*(?:\s*-\s*(.*))?/)
+      if (match && suggestions.length < 4) {
+        const title = match[1].trim()
+        const description = match[2]?.trim() || `Explore ${title}`
+        suggestions.push({
+          id: `suggestion-${Date.now()}-${suggestions.length}`,
+          title,
+          description
+        })
+      }
+    }
+    
+    return suggestions
+  }
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
 
@@ -65,18 +97,30 @@ export default function PlanningChat({ isOpen, onClose, tripTitle }: PlanningCha
         },
         body: JSON.stringify({
           prompt: inputMessage.trim(),
-          system: `You are a helpful AI trip planning assistant named M.Q. for a trip called "${tripTitle}". You have access to Google Maps services to help with location searches, directions, travel times, and place details. Be concise but helpful, and a little witty and goofy, in your responses. Focus on practical travel advice and specific recommendations.`
+          system: `You are a helpful AI trip planning assistant named M.Q. for a trip called "${tripTitle}". You have access to Google Maps services to help with location searches, directions, travel times, and place details. Be concise but helpful, and a little witty and goofy, in your responses. Focus on practical travel advice and specific recommendations.
+
+When providing location recommendations, format them as a numbered list with location names in bold (**Location Name**) followed by a dash and brief description. For example:
+1. **Golden Gate Bridge** - Iconic suspension bridge with stunning views
+2. **Alcatraz Island** - Historic former prison with guided tours
+3. **Fisherman's Wharf** - Waterfront area with shops and restaurants
+4. **Lombard Street** - Famous winding street known as the crookedest in the world
+
+This helps users drag these locations directly to their trip canvas.`
         }),
       })
 
       const data = await response.json()
 
       if (data.ok) {
+        const responseText = data.text || 'I apologize, but I couldn\'t generate a response. Please try again.'
+        const suggestions = parseLocationSuggestions(responseText)
+        
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           type: 'assistant',
-          content: data.text || 'I apologize, but I couldn\'t generate a response. Please try again.',
-          timestamp: new Date()
+          content: responseText,
+          timestamp: new Date(),
+          suggestions: suggestions.length > 0 ? suggestions : undefined
         }
         setMessages(prev => [...prev, assistantMessage])
       } else {
@@ -179,6 +223,26 @@ export default function PlanningChat({ isOpen, onClose, tripTitle }: PlanningCha
                   {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
+              
+              {/* Individual add to canvas buttons */}
+              {message.suggestions && message.suggestions.length > 0 && (
+                <div className="mt-2 max-w-[80%] space-y-2">
+                  {message.suggestions.map((suggestion) => (
+                    <div key={suggestion.id} className="flex items-center justify-between bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg p-2">
+                      <div className="flex items-center gap-2 flex-1">
+                        <img src="/mquest_location.png" className="h-5 w-5 flex-shrink-0" />
+                        <span className="font-medium text-gray-900 text-sm">{suggestion.title}</span>
+                      </div>
+                      <button
+                        onClick={() => onAddSuggestionToCanvas(suggestion)}
+                        className="bg-[#D2B48C] text-black px-2 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           
