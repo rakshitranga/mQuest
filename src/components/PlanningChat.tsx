@@ -206,7 +206,7 @@ This helps users drag these locations directly to their trip canvas with accurat
       
       {/* Chat Panel */}
       <div 
-        className="relative w-1/4 min-w-80 max-w-md h-full rounded-l-2xl shadow-2xl flex flex-col"
+        className="relative w-1/3 min-w-80 max-w-md h-full rounded-l-2xl shadow-2xl flex flex-col"
         style={{
           backgroundImage: 'url(/quest_cardstone.png)',
           backgroundSize: 'cover',
