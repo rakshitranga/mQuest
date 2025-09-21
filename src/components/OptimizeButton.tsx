@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 
 interface OptimizeButtonProps {
   onClick: () => void
@@ -26,19 +27,12 @@ export default function OptimizeButton({ onClick }: OptimizeButtonProps) {
       `}
       title="Optimize Route"
     >
-      <svg 
-        className="w-6 h-6 text-white" 
-        fill="none" 
-        stroke="currentColor" 
-        viewBox="0 0 24 24"
-      >
-        <path 
-          strokeLinecap="round" 
-          strokeLinejoin="round" 
-          strokeWidth={2} 
-          d="M13 10V3L4 14h7v7l9-11h-7z" 
-        />
-      </svg>
+      <Image
+        src="/mquest_battery.png"
+        alt="Optimize Route"
+        width={24}
+        height={24}
+      />
     </button>
   )
 }
