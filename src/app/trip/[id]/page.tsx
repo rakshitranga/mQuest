@@ -203,8 +203,130 @@ export default function TripPage() {
   const copyShareLink = () => {
     const shareUrl = `${window.location.origin}/trip/${tripId}`
     navigator.clipboard.writeText(shareUrl)
-    // You could add a toast notification here
     alert('Share link copied to clipboard!')
+  }
+
+  const areAllBoxesConnected = () => {
+    if (!canvasData || !canvasData.boxes || !canvasData.connections) return false
+    
+    const boxes = canvasData.boxes
+    const connections = canvasData.connections
+    
+    if (boxes.length === 0) return false
+    if (boxes.length === 1) return true
+    if (connections.length === 0) return false
+    
+    // Build adjacency list
+    const adjacencyList: { [key: string]: string[] } = {}
+    boxes.forEach((box: any) => {
+      adjacencyList[box.id] = []
+    })
+    
+    connections.forEach((conn: any) => {
+      adjacencyList[conn.from].push(conn.to)
+      adjacencyList[conn.to].push(conn.from)
+    })
+    
+    // Check if all boxes are reachable from the first box (connected graph)
+    const visited = new Set<string>()
+    const stack = [boxes[0].id]
+    
+    while (stack.length > 0) {
+      const current = stack.pop()!
+      if (visited.has(current)) continue
+      
+      visited.add(current)
+      adjacencyList[current].forEach(neighbor => {
+        if (!visited.has(neighbor)) {
+          stack.push(neighbor)
+        }
+      })
+    }
+    
+    return visited.size === boxes.length
+  }
+
+  const buildOrderedRoute = () => {
+    if (!canvasData || !canvasData.boxes || !canvasData.connections) return []
+    
+    const boxes = canvasData.boxes
+    const connections = canvasData.connections
+    
+    if (boxes.length === 0) return []
+    if (boxes.length === 1) return [boxes[0]]
+    
+    // Build adjacency list with connection info
+    const adjacencyList: { [key: string]: { id: string, fromSide: string, toSide: string }[] } = {}
+    boxes.forEach((box: any) => {
+      adjacencyList[box.id] = []
+    })
+    
+    connections.forEach((conn: any) => {
+      adjacencyList[conn.from].push({ id: conn.to, fromSide: conn.fromSide, toSide: conn.toSide })
+      adjacencyList[conn.to].push({ id: conn.from, fromSide: conn.toSide, toSide: conn.fromSide })
+    })
+    
+    // Find endpoints (nodes with only one connection) to start the path
+    const endpoints = boxes.filter((box: any) => adjacencyList[box.id].length === 1)
+    
+    // If no endpoints, start from any box (circular route)
+    const startBox = endpoints.length > 0 ? endpoints[0] : boxes[0]
+    
+    // Traverse the path
+    const route = [startBox]
+    const visited = new Set([startBox.id])
+    let current = startBox.id
+    
+    while (route.length < boxes.length) {
+      const neighbors = adjacencyList[current].filter(neighbor => !visited.has(neighbor.id))
+      
+      if (neighbors.length === 0) break // No more unvisited neighbors
+      
+      const nextBox = boxes.find((box: any) => box.id === neighbors[0].id)
+      if (nextBox) {
+        route.push(nextBox)
+        visited.add(nextBox.id)
+        current = nextBox.id
+      } else {
+        break
+      }
+    }
+    
+    return route
+  }
+
+  const generateGoogleMapsUrl = (route: any[]) => {
+    if (route.length === 0) return ''
+    
+    const baseUrl = 'https://www.google.com/maps/dir/'
+    
+    // Encode addresses for URL
+    const waypoints = route.map(box => {
+      const address = box.address && box.address.trim() !== '' ? box.address : box.title
+      return encodeURIComponent(address)
+    }).join('/')
+    
+    return baseUrl + waypoints
+  }
+
+  const exportToGoogleMaps = () => {
+    if (!areAllBoxesConnected()) {
+      alert('Please connect all locations with arrows before exporting to Google Maps. All locations must be connected in a single path.')
+      return
+    }
+    
+    const route = buildOrderedRoute()
+    if (route.length === 0) {
+      alert('No locations found to export.')
+      return
+    }
+    
+    const googleMapsUrl = generateGoogleMapsUrl(route)
+    if (googleMapsUrl) {
+      window.open(googleMapsUrl, '_blank')
+    } else {
+      alert('Unable to generate Google Maps URL.')
+    }
   }
 
   const addSuggestionToCanvas = (suggestion: any) => {
@@ -409,6 +531,15 @@ export default function TripPage() {
         className="text-sm px-3 py-1.5 rounded-md bg-red-600/90 hover:bg-red-700/90 text-white disabled:opacity-50 backdrop-blur-sm transition-all"
       >
         Remove All Arrows
+      </button>
+
+      <button
+        onClick={exportToGoogleMaps}
+        disabled={!canvasData || canvasData.boxes?.length === 0 || !areAllBoxesConnected()}
+        className="text-sm px-3 py-1.5 rounded-md bg-green-600/90 hover:bg-green-700/90 text-white disabled:opacity-50 disabled:bg-gray-400/90 backdrop-blur-sm transition-all"
+        title={!areAllBoxesConnected() ? "Connect all locations with arrows to export" : "Export route to Google Maps"}
+      >
+        🗺️ Export to Maps
       </button>
 
       <button
