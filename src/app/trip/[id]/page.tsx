@@ -8,6 +8,8 @@ import Canvas from '@/components/Canvas'
 import CanvasToolbar from '@/components/CanvasToolbar'
 import ChatButton from '@/components/ChatButton'
 import PlanningChat from '@/components/PlanningChat'
+import OptimizeButton from '@/components/OptimizeButton'
+import OptimizeModal from '@/components/OptimizeModal'
 
 export default function TripPage() {
   const { user, loading: authLoading } = useAuth()
@@ -20,6 +22,7 @@ export default function TripPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isOptimizeOpen, setIsOptimizeOpen] = useState(false)
   const router = useRouter()
   const params = useParams()
   const tripId = params.id as string
@@ -176,7 +179,8 @@ export default function TripPage() {
       x: 50, // Bottom left corner - x position
       y: window.innerHeight - 200, // Bottom left corner - y position
       title: suggestion.title,
-      description: suggestion.description
+      description: suggestion.description,
+      address: suggestion.title // Use title as default address
     }
     
     const updatedCanvasData = {
@@ -187,6 +191,44 @@ export default function TripPage() {
     // Update state immediately (localStorage will be updated by useEffect)
     setCanvasData(updatedCanvasData)
     setHasUnsavedChanges(true)
+  }
+
+  const handleOptimizeRoute = async (startBoxId: string, endBoxId: string) => {
+    if (!canvasData) return
+
+    try {
+      const response = await fetch('/api/optimize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          boxes: canvasData.boxes || [],
+          startBoxId,
+          endBoxId
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Update canvas with optimized connections
+        const updatedCanvasData = {
+          ...canvasData,
+          connections: data.connections
+        }
+        
+        setCanvasData(updatedCanvasData)
+        setHasUnsavedChanges(true)
+        
+        alert(`Optimized route found with ${data.path.length} stops!`)
+      } else {
+        throw new Error(data.error || 'Failed to optimize route')
+      }
+    } catch (error) {
+      console.error('Route optimization failed:', error)
+      throw error
+    }
   }
 
   if (authLoading || loading) {
@@ -375,6 +417,11 @@ export default function TripPage() {
         onClick={() => setIsChatOpen(true)}
       />
 
+      {/* Optimize Button */}
+      <OptimizeButton 
+        onClick={() => setIsOptimizeOpen(true)}
+      />
+
       {/* Planning Chat */}
       <PlanningChat
         isOpen={isChatOpen}
@@ -382,6 +429,14 @@ export default function TripPage() {
         onReopen={() => setIsChatOpen(true)}
         tripTitle={trip.title}
         onAddSuggestionToCanvas={addSuggestionToCanvas}
+      />
+
+      {/* Optimize Modal */}
+      <OptimizeModal
+        isOpen={isOptimizeOpen}
+        onClose={() => setIsOptimizeOpen(false)}
+        boxes={canvasData?.boxes || []}
+        onOptimize={handleOptimizeRoute}
       />
     </div>
   )

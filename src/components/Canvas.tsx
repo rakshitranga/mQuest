@@ -7,6 +7,7 @@ type Box = {
   y: number;
   title: string;
   description: string;
+  address: string;
 };
 
 type Connection = {
@@ -73,7 +74,8 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
         x: x - 160, // Center the box (width/2)
         y: y - 66,  // Center the box (height/2)
         title: customTitle || "New Location",
-        description: customDescription || "Click to edit description"
+        description: customDescription || "Click to edit description",
+        address: customTitle || "New Location"
       };
 
       const newBoxes = [...boxes, newBox];
@@ -136,7 +138,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
   };
 
   // Update box content
-  const updateBox = (id: string, field: 'title' | 'description', value: string) => {
+  const updateBox = (id: string, field: 'title' | 'description' | 'address', value: string) => {
     const newBoxes = boxes.map((box) =>
       box.id === id ? { ...box, [field]: value } : box
     );
@@ -202,7 +204,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
     side: "top" | "bottom"
   ): { x: number; y: number } => {
     const width = 320;
-    const height = 120;
+    const height = 160; // Updated height to match new box size
     return {
       x: box.x + width / 2,
       y: side === "top" ? box.y : box.y + height,
@@ -275,7 +277,7 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
       {boxes.map((box) => (
         <div
           key={box.id}
-          className="box absolute rounded-xl shadow-md border border-gray-200 p-4 w-80 h-32 group text-black"
+          className="box absolute rounded-xl shadow-md border border-gray-200 p-4 w-80 h-40 group text-black"
           style={{ 
             left: box.x, 
             top: box.y,
@@ -300,13 +302,20 @@ export default function Canvas({ initialData, onDataChange }: CanvasProps) {
 
           <input
             type="text"
-            className="w-full text-sm font-semibold focus:outline-none bg-transparent"
+            className="w-full text-sm font-semibold focus:outline-none bg-transparent mb-1"
             placeholder="Location Title"
             value={box.title}
             onChange={(e) => updateBox(box.id, 'title', e.target.value)}
           />
+          <input
+            type="text"
+            className="w-full text-xs text-gray-700 focus:outline-none bg-gray-50 rounded p-1 mb-1"
+            placeholder="Address or location..."
+            value={box.address}
+            onChange={(e) => updateBox(box.id, 'address', e.target.value)}
+          />
           <textarea
-            className="w-full text-xs text-gray-700 rounded p-1 mt-2 resize-none focus:outline-none bg-gray-50"
+            className="w-full text-xs text-gray-700 rounded p-1 resize-none focus:outline-none bg-gray-50"
             placeholder="Add description, notes, or details..."
             rows={2}
             value={box.description}
